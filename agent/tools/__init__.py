@@ -1,2 +1,1 @@
-"""Tool helpers for experiment assistant."""
-
+"""Tool helpers for robot agents."""

@@ -21,6 +21,7 @@ from agent.runtime.session_store import SessionStore
 from agent.runtime.telemetry_cache import TelemetryCache
 from agent.runtime.tool_context import ToolContext
 from agent.services.experiment_service import ExperimentAssistantService
+from agent.services.fault_service import FaultAnalysisAssistantService
 from agent.services.response_formatter import error_payload, success_payload
 
 
@@ -41,11 +42,17 @@ class AgentRuntime(object):
             base_url=base_url,
         )
         self._experiment_service = None
+        self._fault_service = None
         self._load_error = None
 
         try:
+            llm = self._build_llm()
             self._experiment_service = ExperimentAssistantService(
-                llm=self._build_llm(),
+                llm=llm,
+                tool_context=self.tool_context,
+            )
+            self._fault_service = FaultAnalysisAssistantService(
+                llm=llm,
                 tool_context=self.tool_context,
             )
         except Exception as exc:
@@ -67,8 +74,11 @@ class AgentRuntime(object):
 
     def health(self):
         return {
-            "available": self._experiment_service is not None,
-            "service": "experiment_assistant",
+            "available": self._experiment_service is not None or self._fault_service is not None,
+            "services": {
+                "experiment_assistant": self._experiment_service is not None,
+                "fault_analysis_assistant": self._fault_service is not None,
+            },
             "model": self.config.openai_model,
             "has_api_key": bool(self.config.openai_api_key),
             "load_error": self._load_error,
@@ -78,15 +88,29 @@ class AgentRuntime(object):
 
     def invoke(self, role, message, context=None):
         context = context or {}
-        if role != "experiment_assistant":
-            return error_payload("unsupported role: %s" % role)
-        if self._experiment_service is None:
-            return error_payload(
-                "experiment assistant unavailable",
-                warnings=[self._load_error] if self._load_error else [],
+        if role == "experiment_assistant":
+            if self._experiment_service is None:
+                return error_payload(
+                    "experiment assistant unavailable",
+                    warnings=[self._load_error] if self._load_error else [],
+                    title="experiment_assistant",
+                )
+            result = self._experiment_service.invoke(
+                message=message,
+                selected_file=context.get("selected_file"),
             )
-        result = self._experiment_service.invoke(
-            message=message,
-            selected_file=context.get("selected_file"),
-        )
-        return success_payload(result.dict())
+            return success_payload(result.dict(), title="experiment_assistant")
+        if role == "fault_analysis_assistant":
+            if self._fault_service is None:
+                return error_payload(
+                    "fault analysis assistant unavailable",
+                    warnings=[self._load_error] if self._load_error else [],
+                    title="fault_analysis_assistant",
+                )
+            result = self._fault_service.invoke(message=message)
+            return success_payload(
+                result.dict(),
+                title="fault_analysis_assistant",
+                bullets=result.recommended_actions,
+            )
+        return error_payload("unsupported role: %s" % role, title="agent")

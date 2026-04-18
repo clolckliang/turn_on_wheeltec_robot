@@ -1,2 +1,2 @@
-"""LangGraph graphs for robot agents."""
+"""LangGraph builders for robot agents."""
 

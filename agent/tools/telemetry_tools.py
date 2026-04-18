@@ -4,40 +4,24 @@ import csv
 import math
 import os
 
+from agent.tools.fault_tools import build_fault_feature_snapshot, build_fault_result, classify_fault_rule_based
+
 
 def get_current_vehicle_state(tool_context):
     return tool_context.telemetry_cache.get_snapshot()
 
 
 def get_current_fault_summary(tool_context):
-    snapshot = get_current_vehicle_state(tool_context)
-    odom = snapshot.get("odom") or {}
-    currents = snapshot.get("currents") or [0.0, 0.0, 0.0]
-    voltage = float(snapshot.get("voltage") or 0.0)
-    speed_mag = math.sqrt(pow(float(odom.get("linear_x", 0.0)), 2) + pow(float(odom.get("linear_y", 0.0)), 2))
-    peak_current = max(currents or [0.0])
-
-    label = "normal"
-    risk = "low"
-    advice = "继续监控实验数据。"
-    if peak_current > 2.5 and speed_mag < 0.05:
-        label = "possible_stall_or_overload"
-        risk = "high"
-        advice = "检查轮组阻力与负载状态。"
-    elif peak_current > 2.2:
-        label = "high_current"
-        risk = "medium"
-        advice = "建议降低速度倍率并检查摩擦阻力。"
-    elif voltage > 0 and voltage < 22.5:
-        label = "voltage_sag"
-        risk = "medium"
-        advice = "建议补电后继续实验。"
-
+    feature_snapshot = build_fault_feature_snapshot(tool_context)
+    classified = classify_fault_rule_based(tool_context, feature_snapshot)
+    result = build_fault_result(tool_context, feature_snapshot, classified)
     return {
-        "label": label,
-        "risk": risk,
-        "advice": advice,
-        "control_status": snapshot.get("control_status") or {},
+        "label": result.fault_type,
+        "risk": result.severity,
+        "advice": result.recommended_actions[0] if result.recommended_actions else result.explanation,
+        "control_status": get_current_vehicle_state(tool_context).get("control_status") or {},
+        "confidence": result.confidence,
+        "summary": result.dashboard_summary,
     }
 
 
