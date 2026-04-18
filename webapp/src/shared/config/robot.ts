@@ -19,6 +19,14 @@ export const robotConfig = {
     step: 0.1,
     initial: 1,
   },
+  topicFreshness: {
+    odom: 1500,
+    imu: 2000,
+    voltage: 3000,
+    current: 1500,
+    controlStatus: 2500,
+    recorderStatus: 2500,
+  },
   topics: {
     odom: { name: "/odom", type: "nav_msgs/Odometry" },
     imu: { name: "/imu", type: "sensor_msgs/Imu" },

@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { BrowserRouter } from "react-router-dom";
 
+import { useAlertStream } from "@/features/diagnostics/hooks/useAlertStream";
 import { useGamepadBridge } from "@/features/gamepad/hooks/useGamepadBridge";
 import { useCommandPublisher } from "@/features/manual-control/hooks/useCommandPublisher";
 import { useKeyboardControl } from "@/features/manual-control/hooks/useKeyboardControl";
@@ -13,6 +14,7 @@ function RuntimeBootstrap() {
   useCommandPublisher();
   useKeyboardControl();
   useGamepadBridge();
+  useAlertStream();
   return null;
 }
 

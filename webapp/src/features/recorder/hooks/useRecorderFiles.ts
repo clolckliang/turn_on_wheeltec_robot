@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 
 import { listRecorderFiles } from "@/features/recorder/api/files-api";
 import { useRecorderStore } from "@/features/recorder/model/recorder-store";
@@ -8,7 +8,7 @@ export function useRecorderFiles(autoLoad = true) {
   const setError = useRecorderStore((state) => state.setError);
   const setLoadingFiles = useRecorderStore((state) => state.setLoadingFiles);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoadingFiles(true);
     setError(undefined);
     try {
@@ -19,13 +19,13 @@ export function useRecorderFiles(autoLoad = true) {
     } finally {
       setLoadingFiles(false);
     }
-  };
+  }, [setError, setFiles, setLoadingFiles]);
 
   useEffect(() => {
     if (autoLoad) {
       void refresh();
     }
-  }, [autoLoad]);
+  }, [autoLoad, refresh]);
 
   return { refresh };
 }

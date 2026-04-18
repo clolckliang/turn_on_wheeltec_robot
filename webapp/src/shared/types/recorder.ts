@@ -1,4 +1,5 @@
 export type RecorderState = "idle" | "recording" | "processing";
+export type RecorderCommand = "start" | "stop";
 
 export interface RecorderStatus {
   state: RecorderState;
@@ -7,6 +8,12 @@ export interface RecorderStatus {
   rate: number;
   file: string;
   outputDir: string;
+}
+
+export interface PendingRecorderCommand {
+  command: RecorderCommand;
+  sentAt: number;
+  timedOut: boolean;
 }
 
 export interface RecordedFile {

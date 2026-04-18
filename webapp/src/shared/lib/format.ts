@@ -55,6 +55,21 @@ export function formatRelativeDate(timestamp: number) {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+export function formatAge(timestamp: number, now = Date.now()) {
+  if (!timestamp) {
+    return "waiting";
+  }
+
+  const age = Math.max(0, now - timestamp);
+  if (age < 1000) {
+    return `${age} ms`;
+  }
+  if (age < 10_000) {
+    return `${(age / 1000).toFixed(1)} s ago`;
+  }
+  return `${Math.round(age / 1000)} s ago`;
+}
+
 export function severityTone(severity: FaultSeverity) {
   switch (severity) {
     case "normal":

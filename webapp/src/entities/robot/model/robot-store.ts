@@ -5,14 +5,18 @@ import { createTelemetrySnapshot } from "@/shared/lib/ros/adapters";
 import type { LogEntry } from "@/shared/types/log";
 import type { CurrentSample, TelemetrySnapshot, VelocitySample } from "@/shared/types/telemetry";
 
+export type TopicKey = keyof typeof robotConfig.topicFreshness;
+
 interface RobotState {
   telemetry: TelemetrySnapshot;
   velocityHistory: VelocitySample[];
   currentHistory: CurrentSample[];
+  topicSeenAt: Record<TopicKey, number>;
   logs: LogEntry[];
   patchTelemetry: (patch: Partial<TelemetrySnapshot>) => void;
   appendVelocitySample: (sample: VelocitySample) => void;
   appendCurrentSample: (sample: CurrentSample) => void;
+  markTopicSeen: (topic: TopicKey, timestamp?: number) => void;
   appendLog: (entry: Omit<LogEntry, "id" | "timestamp">) => void;
 }
 
@@ -24,6 +28,14 @@ export const useRobotStore = create<RobotState>((set) => ({
   telemetry: createTelemetrySnapshot(),
   velocityHistory: [],
   currentHistory: [],
+  topicSeenAt: {
+    odom: 0,
+    imu: 0,
+    voltage: 0,
+    current: 0,
+    controlStatus: 0,
+    recorderStatus: 0,
+  },
   logs: [],
   patchTelemetry: (patch) =>
     set((state) => ({
@@ -39,6 +51,13 @@ export const useRobotStore = create<RobotState>((set) => ({
   appendCurrentSample: (sample) =>
     set((state) => ({
       currentHistory: appendBounded(state.currentHistory, sample),
+    })),
+  markTopicSeen: (topic, timestamp = Date.now()) =>
+    set((state) => ({
+      topicSeenAt: {
+        ...state.topicSeenAt,
+        [topic]: timestamp,
+      },
     })),
   appendLog: (entry) =>
     set((state) => ({

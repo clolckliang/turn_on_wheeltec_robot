@@ -201,6 +201,29 @@ roslaunch turn_on_wheeltec_robot web_control.launch
 - 如果版本已经是 16 或 18，删除 `node_modules` 和 `package-lock.json` 后重新执行 `npm install`
 - 确认安装后的 Vite 主版本为 4：`npm ls vite`
 
+## 联调诊断
+
+新版控制台不是只显示静态卡片，还会主动给出运行期诊断：
+
+- 顶部状态区会显示 `odom / current / control / recorder` 这些关键 topic 的 `waiting / live / stale`
+- `Current Trends` 和 `Velocity Trends` 在没有数据时会明确提示正在等待哪个 topic
+- Recorder 在点击开始/停止后会显示：
+  - 命令已发送
+  - 正在等待回执
+  - 回执确认
+  - 回执超时
+- `Logs & Alerts` 会自动记录：
+  - rosbridge 连接变化
+  - topic stream active / stale / restored
+  - Recorder ack timeout
+  - Gamepad 接入变化
+
+推荐联调顺序：
+
+1. 先看顶部 connection 是否为 `connected`
+2. 再看 `odom / current / recorder` 是否进入 `live`
+3. 如果 Recorder 无响应，优先检查 `Logs & Alerts`
+
 ## 保留的 ROS / HTTP 合约
 
 - 发布 `/cmd_vel_web`

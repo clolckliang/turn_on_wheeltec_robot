@@ -262,10 +262,31 @@ roslaunch turn_on_wheeltec_robot web_control.launch
 
 1. 浏览器能否打开 `http://<robot-ip>:8000`
 2. 页面顶部连接状态是否从 `Disconnected` 进入 `Connected`
-3. `/web/control_status` 是否有状态输出
-4. 急停按钮是否能让机器人进入锁存急停
-5. Recorder 是否能开始录制、停止录制并下载 CSV
-6. 手机端触控摇杆与 Windows 端 Gamepad 是否能分别接管控制
+3. 顶部状态卡中 `odom / current / control / recorder` 是否从 `waiting` 变成 `live`
+4. `/web/control_status` 是否有状态输出
+5. 急停按钮是否能让机器人进入锁存急停
+6. Recorder 是否能开始录制、停止录制并下载 CSV
+7. 手机端触控摇杆与 Windows 端 Gamepad 是否能分别接管控制
+
+#### 新版前端诊断能力
+
+当前新版控制台已经内置了几类联调诊断信号，便于区分是 ROS 端、rosbridge 还是浏览器端的问题：
+
+- 顶部状态区会显示关键 topic 的存活状态：
+  - `/odom`
+  - `/current_data`
+  - `/web/control_status`
+  - `/web/data_collect/status`
+- 如果 topic 长时间没有新消息，状态会从 `live` 退化成 `stale`
+- Logs & Alerts 区域会自动记录：
+  - rosbridge 连接/重连/断开
+  - topic stream active / stale / restored
+  - Recorder 命令发送、回执确认、回执超时
+
+如果 Recorder 按钮点击后长时间没有变化，优先看这两处：
+
+1. 顶部 `recorder` topic 是否还是 `waiting` / `stale`
+2. Logs & Alerts 中是否出现 `Recorder ack timeout`
 
 #### 回退到旧版页面
 

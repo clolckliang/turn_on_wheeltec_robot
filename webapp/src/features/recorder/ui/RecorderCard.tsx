@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, FolderSync, Play, Square } from "lucide-react";
 
 import { RecorderStateBadge } from "@/entities/recorder/ui/RecorderStateBadge";
+import { useRobotStore } from "@/entities/robot/model/robot-store";
 import { useRecorderFiles } from "@/features/recorder/hooks/useRecorderFiles";
 import { useRecorderStore } from "@/features/recorder/model/recorder-store";
 import { useRosConnectStore } from "@/features/ros-connect/model/ros-connect-store";
 import { robotConfig } from "@/shared/config/robot";
 import { buildRecorderDownloadUrl } from "@/features/recorder/api/files-api";
-import { formatBytes, formatDuration, formatRelativeDate } from "@/shared/lib/format";
+import { formatAge, formatBytes, formatDuration, formatRelativeDate } from "@/shared/lib/format";
 import { rosClient } from "@/shared/lib/ros/client";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
@@ -21,13 +22,20 @@ interface RecorderCardProps {
 export function RecorderCard({ autoLoad = true, compact = false }: RecorderCardProps) {
   const [label, setLabel] = useState("");
   const status = useRecorderStore((state) => state.status);
+  const pendingCommand = useRecorderStore((state) => state.pendingCommand);
   const files = useRecorderStore((state) => state.files);
   const loadingFiles = useRecorderStore((state) => state.loadingFiles);
   const error = useRecorderStore((state) => state.error);
+  const setPendingCommand = useRecorderStore((state) => state.setPendingCommand);
+  const markPendingCommandTimedOut = useRecorderStore((state) => state.markPendingCommandTimedOut);
+  const clearPendingCommand = useRecorderStore((state) => state.clearPendingCommand);
   const rosStatus = useRosConnectStore((state) => state.status);
+  const appendLog = useRobotStore((state) => state.appendLog);
   const { refresh } = useRecorderFiles(autoLoad);
   const rosConnected = rosStatus === "connected";
   const recorderBusy = status.state === "recording" || status.state === "processing";
+  const previousRecorderState = useRef(status.state);
+  const commandTimeoutMs = 4000;
 
   const sendCommand = (command: "start" | "stop") => {
     if (!rosConnected) {
@@ -35,7 +43,67 @@ export function RecorderCard({ autoLoad = true, compact = false }: RecorderCardP
     }
     const payload = command === "start" && label.trim() ? `${command}:${label.trim()}` : command;
     rosClient.publish(robotConfig.topics.recorderCommand.name, robotConfig.topics.recorderCommand.type, { data: payload });
+    setPendingCommand(command);
+    appendLog({
+      level: "info",
+      message: `Recorder command sent -> ${payload}`,
+    });
   };
+
+  useEffect(() => {
+    if (rosConnected) {
+      void refresh();
+    }
+  }, [refresh, rosConnected]);
+
+  useEffect(() => {
+    const previousState = previousRecorderState.current;
+    if (
+      rosConnected &&
+      previousState !== status.state &&
+      (status.state === "recording" || (previousState !== "idle" && status.state === "idle"))
+    ) {
+      void refresh();
+    }
+    previousRecorderState.current = status.state;
+  }, [refresh, rosConnected, status.state]);
+
+  useEffect(() => {
+    if (!pendingCommand) {
+      return;
+    }
+
+    const acknowledged =
+      (pendingCommand.command === "start" && status.state === "recording") ||
+      (pendingCommand.command === "stop" && status.state !== "recording");
+
+    if (!acknowledged) {
+      return;
+    }
+
+    appendLog({
+      level: "info",
+      message: `Recorder ack -> ${pendingCommand.command} confirmed (${status.state})`,
+    });
+    clearPendingCommand();
+  }, [appendLog, clearPendingCommand, pendingCommand, status.state]);
+
+  useEffect(() => {
+    if (!pendingCommand || pendingCommand.timedOut) {
+      return;
+    }
+
+    const remaining = Math.max(0, commandTimeoutMs - (Date.now() - pendingCommand.sentAt));
+    const timer = window.setTimeout(() => {
+      markPendingCommandTimedOut();
+      appendLog({
+        level: "warning",
+        message: `Recorder ack timeout -> ${pendingCommand.command} has no status response after ${commandTimeoutMs / 1000}s`,
+      });
+    }, remaining);
+
+    return () => window.clearTimeout(timer);
+  }, [appendLog, markPendingCommandTimedOut, pendingCommand]);
 
   return (
     <Card className="h-full">
@@ -53,12 +121,22 @@ export function RecorderCard({ autoLoad = true, compact = false }: RecorderCardP
             Recorder 依赖 ROS 实时连接。当前状态为 `{rosStatus}`，开始/停止命令和状态回传会暂时不可用。
           </div>
         ) : null}
+        {pendingCommand && !pendingCommand.timedOut ? (
+          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-700 dark:text-sky-300">
+            正在等待 Recorder 对 `{pendingCommand.command}` 命令回执，已等待 {formatAge(pendingCommand.sentAt)}。
+          </div>
+        ) : null}
+        {pendingCommand?.timedOut ? (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            Recorder 命令 `{pendingCommand.command}` 已发送，但 {commandTimeoutMs / 1000}s 内没有收到 `/web/data_collect/status` 回执。请检查 rosbridge、`data_collector.py` 和录制 topic 链路。
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-3">
-          <Button onClick={() => sendCommand("start")} disabled={!rosConnected || recorderBusy}>
+          <Button onClick={() => sendCommand("start")} disabled={!rosConnected || recorderBusy || !!pendingCommand}>
             <Play className="h-4 w-4" />
             开始
           </Button>
-          <Button variant="danger" onClick={() => sendCommand("stop")} disabled={!rosConnected || status.state !== "recording"}>
+          <Button variant="danger" onClick={() => sendCommand("stop")} disabled={!rosConnected || status.state !== "recording" || !!pendingCommand}>
             <Square className="h-4 w-4" />
             停止
           </Button>
